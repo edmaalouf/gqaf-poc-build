@@ -1,0 +1,26 @@
+name: pair_mobile
+description: Private, compatibility-focused introductions.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  material_ui: ^1.1.0
+  http: ^1.5.0
+  flutter_secure_storage: ^11.2.0
+  image_picker: ^1.2.4
+  intl: ^0.20.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
