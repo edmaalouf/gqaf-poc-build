@@ -60,6 +60,11 @@ void main() {
     );
     await tester.pumpWidget(MaterialApp(home: PairApp(api: api)));
     await tester.pumpAndSettle();
+    expect(find.textContaining('pair'), findsOneWidget);
+    expect(
+      find.text('A little less scrolling.\nA lot more meaning.'),
+      findsOneWidget,
+    );
     await tester.enterText(
       find.byType(TextFormField).first,
       'test@example.test',
@@ -70,7 +75,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(jsonDecode(requests.first.body), {'email': 'test@example.test'});
     expect(api.hasSession, isFalse);
-    expect(find.text('Complete registration'), findsOneWidget);
+    expect(find.text('You’re almost in.'), findsOneWidget);
     await tester.enterText(find.byType(TextFormField).at(0), 'test-code');
     await tester.enterText(
       find.byType(TextFormField).at(1),
@@ -272,13 +277,91 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<int>).first);
+    await tester.ensureVisible(find.text('Agree'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Agree').last);
+    await tester.tap(find.text('Agree'));
     await tester.pumpAndSettle();
     expect(find.text('Answer could not be saved'), findsOneWidget);
-    expect(find.text('0 / 64 answered'), findsOneWidget);
-    expect(find.text('Agree'), findsNothing);
+    expect(find.text('0 of 64'), findsOneWidget);
+    expect(find.text('Statement 1'), findsOneWidget);
+    api.close();
+    controller.dispose();
+  });
+
+  testWidgets('swiping a question card saves an agree answer', (tester) async {
+    var savedValue = 0;
+    final api = PairApi(
+      baseUrl: 'http://localhost:5000',
+      allowDebugHttp: true,
+      sessionStore: MemoryStore(),
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/questions')) {
+          return http.Response(
+            jsonEncode([
+              for (var id = 1; id <= 64; id++)
+                {
+                  'id': id,
+                  'category': 'Category ${(id - 1) ~/ 8 + 1}',
+                  'text': 'Statement $id',
+                },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path.endsWith('/answers/1')) {
+          savedValue = jsonDecode(request.body)['value'] as int;
+          return http.Response('{}', 200);
+        }
+        if (request.url.path.endsWith('/me')) {
+          return http.Response(
+            jsonEncode({
+              'id': 1,
+              'email': 'test@example.test',
+              'verified': true,
+              'profile': null,
+              'preferences': null,
+              'photo': 'missing',
+              'answers': savedValue == 0 ? {} : {'1': savedValue},
+              'ready': false,
+              'matching_paused': false,
+            }),
+            200,
+          );
+        }
+        return http.Response('{"error":"unexpected"}', 404);
+      }),
+    );
+    final controller = AppController(api);
+    controller.account = const Account(
+      id: 1,
+      email: 'test@example.test',
+      verified: true,
+      profile: null,
+      preferences: null,
+      photo: 'missing',
+      answers: {},
+      ready: false,
+      matchingPaused: false,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: QuestionnaireScreen(controller: controller)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final card = find.byKey(const ValueKey('question-card-1'));
+    await tester.ensureVisible(card);
+    final gesture = await tester.startGesture(tester.getCenter(card));
+    await gesture.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(180, 0));
+    await tester.pump();
+    expect(find.text('AGREE'), findsOneWidget);
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(savedValue, 5);
+    expect(find.text('Statement 2'), findsOneWidget);
+    expect(find.text('1 of 64'), findsOneWidget);
     api.close();
     controller.dispose();
   });

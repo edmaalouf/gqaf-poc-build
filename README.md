@@ -1,10 +1,10 @@
 # PAIR — local prototype
 
 PAIR is a **local development prototype**, not a production dating service. It
-has a Flutter Android/iOS client, the original responsive web client, a Flask
-API, a SQLite database and a separate matching worker. The mobile app and
-backend are prototypes, not store-ready products. Do not deploy them publicly
-or enter real or sensitive personal information.
+has a Flutter Android/iOS client, a one-page website that hands off to the
+native app, a Flask API, a SQLite database and a separate matching worker.
+The mobile app and backend are prototypes, not store-ready products. Do not
+deploy them publicly or enter real or sensitive personal information.
 
 ## Technologies
 
@@ -12,7 +12,7 @@ or enter real or sensitive personal information.
   picker for Android and iOS.
 - Python, Flask and SQLite for the current API and persistent data; Pillow
   re-encodes photos. A separate Python worker generates matching cycles.
-- Flutter's test runner, Python unittest/coverage, and Playwright for tests.
+- Flutter's test runner and Python unittest/coverage for tests.
 
 A production replacement still needs a multi-user database such as PostgreSQL,
 reliable queue/worker operations, managed storage and
@@ -39,9 +39,9 @@ $env:PAIR_TIMEZONE = 'UTC' # IANA timezone, e.g. America/New_York
 .\.venv\Scripts\python -m pair.worker
 ```
 
-Open `http://127.0.0.1:5000`. The API and worker default to
-`instance\pair.sqlite3`; set `PAIR_DB` to the same path in both terminals to
-change it. The API uses a random session secret on each restart unless
+Open `http://127.0.0.1:5000` for the mobile-app handoff page. The API and worker
+default to `instance\pair.sqlite3`; set `PAIR_DB` to the same path in both
+terminals to change it. The API uses a random session secret on each restart unless
 `PAIR_SECRET` is set in its environment; restarting invalidates sessions when
 the secret is not set. Never put a real secret into this repository.
 
@@ -340,19 +340,14 @@ and limited results, ties, retry and rollback, blocks, reports, moderation,
 mutual interest, authorization, session revocation, input errors and account
 deletion.
 
-Run the browser tests separately. Install Playwright's Chromium first, or set
-`PAIR_BROWSER_EXECUTABLE` to an existing compatible Chromium-based browser:
+Run the mobile handoff page test separately:
 
 ```powershell
-.\.venv\Scripts\python -m playwright install chromium
 .\.venv\Scripts\python -m unittest discover -s tests-ui -v
 ```
 
-The browser suite exercises responsive layouts, navigation and focus, selected
-contrast and touch-target checks, validation, unsaved changes, retry, matching,
-reporting and messaging. Backend code coverage does not measure browser code
-or prove that 90% of all possible user scenarios or accessibility requirements
-are covered.
+The website intentionally contains no browser app; the only supported
+experience is the native Flutter mobile client.
 
 Run mobile static analysis and Flutter unit/widget tests:
 

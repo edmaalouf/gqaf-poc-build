@@ -724,7 +724,8 @@ class QuestionnaireScreen extends StatefulWidget {
 
 class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
   late Future<List<Question>> questions;
-  int category = 0, answerRevision = 0;
+  int? currentQuestion;
+  double dragOffset = 0;
   bool busy = false;
   @override
   void initState() {
@@ -732,9 +733,9 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
     questions = widget.controller.api.questions();
   }
 
-  Future<void> answer(int id, int value) async {
+  Future<void> answer(List<Question> all, int id, int value) async {
     setState(() => busy = true);
-    await runAction(context, () async {
+    final saved = await runAction(context, () async {
       await widget.controller.api.request(
         'PUT',
         '/api/v1/answers/$id',
@@ -745,9 +746,27 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
     if (mounted) {
       setState(() {
         busy = false;
-        answerRevision++;
+        dragOffset = 0;
+        if (saved) {
+          final next = all.indexWhere(
+            (question) =>
+                question.id != id &&
+                !widget.controller.account!.answers.containsKey(question.id),
+          );
+          currentQuestion = next < 0 ? all.indexWhere((q) => q.id == id) : next;
+        }
       });
     }
+  }
+
+  void answerFromSwipe(List<Question> all, Question question) {
+    if (busy || dragOffset.abs() < 72) {
+      setState(() => dragOffset = 0);
+      return;
+    }
+    final strongly = dragOffset.abs() >= 140;
+    final value = dragOffset > 0 ? (strongly ? 5 : 4) : (strongly ? 1 : 2);
+    answer(all, question.id, value);
   }
 
   @override
@@ -786,81 +805,258 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
         final account = widget.controller.account;
         if (account == null) return const SizedBox.shrink();
         final answers = account.answers;
-        return PageBody(
-          title: 'Your answers',
-          subtitle: 'No right answers. Your responses stay private.',
-          children: [
-            Text('${answers.length} / 64 answered'),
-            const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: answers.length / 64,
-              semanticsLabel:
-                  'Questionnaire progress, ${answers.length} of 64 answered',
-            ),
-            const SizedBox(height: 20),
-            Text(
-              '${categories[category]} · ${category + 1} of 8',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            const Text('Each answer saves when selected.'),
-            const SizedBox(height: 16),
-            for (final q in all.where(
-              (q) => q.category == categories[category],
-            ))
-              Panel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        final firstUnanswered = all.indexWhere(
+          (question) => !answers.containsKey(question.id),
+        );
+        final index =
+            currentQuestion ?? (firstUnanswered < 0 ? 0 : firstUnanswered);
+        final question = all[index];
+        final categoryIndex = categories.indexOf(question.category);
+        final picked = answers[question.id];
+        final labels = switch (picked) {
+          1 => 'Strongly disagree',
+          2 => 'Disagree',
+          3 => 'Neutral',
+          4 => 'Agree',
+          5 => 'Strongly agree',
+          _ => null,
+        };
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 620),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+              children: [
+                Text(
+                  'Get to know your kind of person.',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  'Your answers stay private. There are no right ones.',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '${q.id}. ${q.text}',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<int>(
-                      key: ValueKey('${q.id}-${answers[q.id]}-$answerRevision'),
-                      initialValue: answers[q.id],
-                      decoration: const InputDecoration(
-                        labelText: 'Your answer',
+                      '${answers.length} of 64',
+                      style: const TextStyle(
+                        color: Color(0xff315e46),
+                        fontWeight: FontWeight.w700,
                       ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 5,
-                          child: Text('Strongly agree'),
-                        ),
-                        DropdownMenuItem(value: 4, child: Text('Agree')),
-                        DropdownMenuItem(value: 3, child: Text('Neutral')),
-                        DropdownMenuItem(value: 2, child: Text('Disagree')),
-                        DropdownMenuItem(
-                          value: 1,
-                          child: Text('Strongly disagree'),
-                        ),
-                      ],
-                      onChanged: busy
-                          ? null
-                          : (value) {
-                              if (value != null) answer(q.id, value);
-                            },
+                    ),
+                    Text(
+                      '${(answers.length * 100 / 64).round()}% complete',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
-              ),
-            Row(
-              children: [
-                if (category > 0)
-                  OutlinedButton(
-                    onPressed: busy ? null : () => setState(() => category--),
-                    child: const Text('Previous'),
+                const SizedBox(height: 9),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    minHeight: 8,
+                    value: answers.length / 64,
+                    semanticsLabel:
+                        'Questionnaire progress, ${answers.length} of 64 answered',
+                    color: const Color(0xff567d60),
+                    backgroundColor: const Color(0xffe1e9df),
                   ),
-                const Spacer(),
-                if (category < 7)
-                  FilledButton(
-                    onPressed: busy ? null : () => setState(() => category++),
-                    child: const Text('Next category'),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xffe5eee3),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        question.category,
+                        style: const TextStyle(
+                          color: Color(0xff315b42),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${index + 1} / 64',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                GestureDetector(
+                  key: ValueKey('question-card-${question.id}'),
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragUpdate: busy
+                      ? null
+                      : (details) => setState(() {
+                          final delta = details.primaryDelta ?? 0;
+                          dragOffset = (dragOffset + delta)
+                              .clamp(-170, 170)
+                              .toDouble();
+                        }),
+                  onHorizontalDragEnd: busy
+                      ? null
+                      : (_) => answerFromSwipe(all, question),
+                  child: Transform.translate(
+                    offset: Offset(dragOffset * 0.18, 0),
+                    child: Transform.rotate(
+                      angle: dragOffset / 900,
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 280),
+                        padding: const EdgeInsets.all(26),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: const Color(0xffd7ddd4)),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x14182e27),
+                              blurRadius: 20,
+                              offset: Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (dragOffset.abs() > 25)
+                              Align(
+                                alignment: dragOffset > 0
+                                    ? Alignment.centerRight
+                                    : Alignment.centerLeft,
+                                child: Text(
+                                  dragOffset > 0 ? 'AGREE' : 'DISAGREE',
+                                  style: TextStyle(
+                                    color: const Color(0xff315e46).withValues(
+                                      alpha: (dragOffset.abs() / 120)
+                                          .clamp(0.35, 1)
+                                          .toDouble(),
+                                    ),
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.4,
+                                  ),
+                                ),
+                              ),
+                            if (dragOffset.abs() > 25)
+                              const SizedBox(height: 16),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 240),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              transitionBuilder: (child, animation) =>
+                                  FadeTransition(
+                                    opacity: animation,
+                                    child: SlideTransition(
+                                      position: Tween<Offset>(
+                                        begin: const Offset(0.04, 0),
+                                        end: Offset.zero,
+                                      ).animate(animation),
+                                      child: child,
+                                    ),
+                                  ),
+                              child: Text(
+                                question.text,
+                                key: ValueKey(question.id),
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.headlineSmall
+                                    ?.copyWith(
+                                      color: const Color(0xff202b26),
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.25,
+                                    ),
+                              ),
+                            ),
+                            if (labels != null) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                'Your answer: $labels',
+                                style: const TextStyle(
+                                  color: Color(0xff315b42),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 24),
+                            Text(
+                              busy
+                                  ? 'Saving your answer…'
+                                  : 'Swipe right to agree · left to disagree',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
+                ),
+                const SizedBox(height: 20),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 7,
+                  runSpacing: 8,
+                  children: [
+                    _AnswerChoice(
+                      label: 'Strongly disagree',
+                      value: 1,
+                      selected: picked == 1,
+                      enabled: !busy,
+                      onTap: () => answer(all, question.id, 1),
+                    ),
+                    _AnswerChoice(
+                      label: 'Disagree',
+                      value: 2,
+                      selected: picked == 2,
+                      enabled: !busy,
+                      onTap: () => answer(all, question.id, 2),
+                    ),
+                    _AnswerChoice(
+                      label: 'Neutral',
+                      value: 3,
+                      selected: picked == 3,
+                      enabled: !busy,
+                      onTap: () => answer(all, question.id, 3),
+                    ),
+                    _AnswerChoice(
+                      label: 'Agree',
+                      value: 4,
+                      selected: picked == 4,
+                      enabled: !busy,
+                      onTap: () => answer(all, question.id, 4),
+                    ),
+                    _AnswerChoice(
+                      label: 'Strongly agree',
+                      value: 5,
+                      selected: picked == 5,
+                      enabled: !busy,
+                      onTap: () => answer(all, question.id, 5),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Center(
+                  child: Text(
+                    'Section ${categoryIndex + 1} of 8 · one question at a time',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               ],
             ),
-          ],
+          ),
         );
       },
     );
@@ -868,4 +1064,40 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
         ? Scaffold(appBar: AppBar(), body: content)
         : content;
   }
+}
+
+class _AnswerChoice extends StatelessWidget {
+  const _AnswerChoice({
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+  final String label;
+  final int value;
+  final bool selected, enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    label: '$label, answer value $value',
+    child: OutlinedButton(
+      onPressed: enabled ? onTap : null,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: selected ? Colors.white : const Color(0xff315b42),
+        backgroundColor: selected
+            ? const Color(0xff315b42)
+            : const Color(0xfffffefa),
+        side: BorderSide(
+          color: selected ? const Color(0xff315b42) : const Color(0xffcbd9cc),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      child: Text(label),
+    ),
+  );
 }

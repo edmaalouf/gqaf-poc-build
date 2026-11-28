@@ -18,6 +18,17 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>pair_mobile</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.pair.mobile</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>pair</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
