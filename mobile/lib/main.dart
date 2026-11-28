@@ -9,7 +9,9 @@ void main() {
   const configured = String.fromEnvironment('PAIR_API_URL');
   final base = configured.isNotEmpty
       ? configured
-      : (kDebugMode && defaultTargetPlatform == TargetPlatform.android
+      : (kIsWeb
+            ? Uri.base.origin
+            : kDebugMode && defaultTargetPlatform == TargetPlatform.android
             ? 'http://10.0.2.2:5000'
             : 'http://127.0.0.1:5000');
   runApp(PairRoot(baseUrl: base));

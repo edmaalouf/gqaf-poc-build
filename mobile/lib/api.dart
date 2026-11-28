@@ -86,6 +86,10 @@ class PairApi {
   VoidCallback? onUnauthorized;
 
   Future<void> restore() async {
+    if (kIsWeb) {
+      _session = 'web-session';
+      return;
+    }
     _session = await _store.read(_sessionKey);
     if (_session != null && !_validSession(_session!)) {
       await clearSession();
@@ -127,7 +131,9 @@ class PairApi {
     request.followRedirects = false;
     request.headers['Accept'] = 'application/json';
     request.headers['X-Pair-Request'] = '1';
-    if (_session != null) request.headers['Cookie'] = 'session=$_session';
+    if (_session != null && !kIsWeb) {
+      request.headers['Cookie'] = 'session=$_session';
+    }
     try {
       final stream = await _client
           .send(request)
@@ -156,7 +162,14 @@ class PairApi {
         }
         throw ApiException(message, status: response.statusCode);
       }
-      await _saveCookie(response.headers['set-cookie']);
+      if (kIsWeb) {
+        if (request.url.path == '/api/v1/auth/login' ||
+            request.url.path == '/api/v1/auth/activate') {
+          _session = 'web-session';
+        }
+      } else {
+        await _saveCookie(response.headers['set-cookie']);
+      }
       return response;
     } on SocketException {
       throw const ApiException(
